@@ -243,3 +243,23 @@ html, body {
     gap: 10px;
   }
 }
+
+/* Estado de espera de aceptación */
+#call-remote-meta {
+  margin: 6px 0 0;
+  color: rgba(255,255,255,0.65);
+  font-size: 0.86rem;
+}
+
+.waiting-actions {
+  margin-top: 18px;
+}
+
+.waiting-actions .ghost {
+  color: #fff;
+  border-color: rgba(255,255,255,0.45);
+}
+
+.waiting-actions .ghost:hover {
+  border-color: var(--yellow);
+}

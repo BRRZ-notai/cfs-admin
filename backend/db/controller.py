@@ -90,6 +90,8 @@ def asegurarAdminPredeterminado(
                 text("INSERT INTO tecnico_jefe (id_empleado, nivel_acceso) VALUES (:id, 5) ON CONFLICT (id_empleado) DO UPDATE SET nivel_acceso = 5"),
                 {"id": emp.id_empleado},
             )
+            db.commit()
+            print(f"[+] Administrador predeterminado '{usuario}' verificado y sincronizado.")
 
         # Sembrar dispositivos de ejemplo para la primera sede si existe y no tiene equipos
         from db.template.sede import Sede
@@ -124,9 +126,7 @@ def asegurarAdminPredeterminado(
                         id_sede = primera_sede.id_sede,
                     ),
                 ])
-
-        db.commit()
-        print(f"[+] Administrador predeterminado '{usuario}' verificado y sincronizado.")
+                db.commit()
 
 
 def createAdmin(usuario: str, nombre: str, password: str) -> None:

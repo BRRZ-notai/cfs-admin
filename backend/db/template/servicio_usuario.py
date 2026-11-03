@@ -17,14 +17,14 @@ class ServicioUsuario(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     id_empleado: Mapped[int] = mapped_column(
-        ForeignKey("empleados.id_empleado", ondelete="CASCADE")
+        ForeignKey("empleados.id_empleado", ondelete="CASCADE"), index=True
     )
     tipo_servicio: Mapped[str] = mapped_column(String(50))
     habilitado: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"
     )
     id_sede: Mapped[int | None] = mapped_column(
-        ForeignKey("sedes.id_sede", ondelete="SET NULL"), nullable=True
+        ForeignKey("sedes.id_sede", ondelete="SET NULL"), nullable=True, index=True
     )
 
     # Relaciones
@@ -39,7 +39,8 @@ class ServicioUsuario(Base):
         UniqueConstraint(
             "id_empleado",
             "tipo_servicio",
-            name="uq_servicios_usuario_id_empleado_tipo_servicio",
+            "id_sede",
+            name="uq_servicios_usuario_id_empleado_tipo_servicio_sede",
         ),
     )
 

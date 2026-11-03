@@ -27,14 +27,15 @@ def _cambiarPassword(
 
     # Validar longitud mínima
     min_len = getLongHashPassword()
-    if len(data.contrasena_nueva.strip()) < min_len:
+    nueva_contrasena = data.contrasena_nueva.strip()
+    if len(nueva_contrasena) < min_len:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"La nueva contraseña debe tener al menos {min_len} caracteres.",
         )
 
     # Hashear y actualizar
-    user.contrasena_hash = hashearPassword(data.contrasena_nueva)
+    user.contrasena_hash = hashearPassword(nueva_contrasena)
     db.commit()
 
     return {"detalle": "Contraseña actualizada exitosamente."}

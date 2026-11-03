@@ -39,6 +39,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      VIDEO_INVITACION_EXPIRA_MINUTOS: ${VIDEO_INVITACION_EXPIRA_MINUTOS:-2}
+      STUN_URLS: ${STUN_URLS:-["stun:stun.l.google.com:19302"]}
+      TURN_URL: ${TURN_URL:-}
+      TURN_USERNAME: ${TURN_USERNAME:-}
+      TURN_CREDENTIAL: ${TURN_CREDENTIAL:-}
     depends_on:
       db:
         condition: service_healthy

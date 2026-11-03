@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from .base import Base
 from typing import TYPE_CHECKING
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 if TYPE_CHECKING:
@@ -32,6 +32,11 @@ class Contacto(Base):
 
     __table_args__ = (
         UniqueConstraint("id_usuario", "id_contacto", name="uq_contactos_usuario_contacto"),
+        Index(
+            "ix_contactos_id_usuario_formal",
+            "id_usuario",
+            "registrado_formalmente",
+        ),
     )
 
     def __repr__(self) -> str:

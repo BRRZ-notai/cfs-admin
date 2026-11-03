@@ -102,11 +102,12 @@ def _crearUsuarioEnSede(
             db.add(rol_admin_s)
             db.flush()
 
-        # Validar que la sede no tenga ya un admin-s asignado
+        # Validar que la sede no tenga ya un admin-s activo asignado
         existing_admin_s = db.execute(
             select(Tecnico)
             .where(Tecnico.id_sede == id_sede)
             .where(Tecnico.id_rol == rol_admin_s.id_rol)
+            .where(Tecnico.activo == True)  # noqa: E712
         ).scalar_one_or_none()
         if existing_admin_s is not None:
             raise HTTPException(
@@ -189,6 +190,21 @@ def _eliminarUsuarioDeSede(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"El empleado con ID {id_empleado} no existe.",
         )
+
+    # Verificar que el empleado pertenezca a esta sede
+    id_sede_objetivo = getattr(objetivo, "id_sede", None)
+    if id_sede_objetivo != id_sede:
+        tiene_servicio_en_sede = db.scalars(
+            select(ServicioUsuario).where(
+                ServicioUsuario.id_empleado == id_empleado,
+                ServicioUsuario.id_sede == id_sede,
+            )
+        ).first()
+        if tiene_servicio_en_sede is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"El empleado con ID {id_empleado} no pertenece a la sede {id_sede}.",
+            )
 
     # Restricciones
     if tipo_admin == "admin-s":

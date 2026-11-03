@@ -15,7 +15,11 @@
     <div class="video-placeholder" id="remote-placeholder">
       <div class="placeholder-avatar">👤</div>
       <h3 id="remote-user-name">Esperando conexión…</h3>
-      <p id="call-status-text">Conectando señalización WebRTC en tu sede…</p>
+      <p id="call-status-text">Preparando la videollamada…</p>
+      <p id="call-remote-meta"></p>
+      <div class="waiting-actions" id="waiting-actions" hidden>
+        <button class="ghost" id="btn-cancelar-espera" type="button">Cancelar invitación</button>
+      </div>
     </div>
   </div>
 
@@ -30,7 +34,7 @@
     <div class="call-room-info">
       <span class="mark">CFS</span>
       <div>
-        <h2 id="call-title">Videoconferencia Intra-Sede</h2>
+        <h2 id="call-title">Videollamada</h2>
         <span class="call-meta" id="call-room-code">Sala: Conectando…</span>
       </div>
     </div>

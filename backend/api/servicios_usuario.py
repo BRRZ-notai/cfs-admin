@@ -28,6 +28,16 @@ def _verificarAccesoSede(user: Empleado, id_sede: int) -> None:
         )
 
 
+def _verificarSedeObjetivo(objetivo: Empleado, id_sede: int) -> None:
+    """Lanza 403 si el empleado objetivo no pertenece a la sede indicada."""
+    id_sede_objetivo = getattr(objetivo, "id_sede", None)
+    if id_sede_objetivo is not None and id_sede_objetivo != id_sede:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El usuario no pertenece a la sede indicada.",
+        )
+
+
 def _puedeGestionarEmpleado(user: Empleado, objetivo: Empleado) -> bool:
     """
     Determina si el usuario actual puede gestionar los servicios del objetivo.
@@ -92,10 +102,9 @@ def _listarUsuariosSede(
     resultado = []
     for emp in empleados:
         emp_sede = getattr(emp, "id_sede", None)
-        servicios_sede = [s for s in emp.servicios_usuario if s.id_sede == id_sede]
 
-        # Incluir si está asignado a la sede o tiene servicios en ella
-        if emp_sede == id_sede or servicios_sede or emp.tipo == "usuario_sede":
+        # Incluir únicamente si su sede principal es la sede consultada
+        if emp_sede == id_sede:
             resultado.append({
                 "id_empleado": emp.id_empleado,
                 "nombre": emp.nombre,
@@ -143,6 +152,7 @@ def _habilitarServicio(
             detail=f"El empleado con ID {id_empleado} no existe.",
         )
 
+    _verificarSedeObjetivo(objetivo, id_sede)
     if not _puedeGestionarEmpleado(user, objetivo):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -153,7 +163,7 @@ def _habilitarServicio(
         select(ServicioUsuario).where(
             ServicioUsuario.id_empleado == id_empleado,
             ServicioUsuario.tipo_servicio == tipo_servicio,
-            ServicioUsuario.id_sede == id_sede,
+            or_(ServicioUsuario.id_sede == id_sede, ServicioUsuario.id_sede.is_(None)),
         )
     ).first()
 
@@ -167,6 +177,7 @@ def _habilitarServicio(
         db.add(registro)
     else:
         registro.habilitado = True
+        registro.id_sede = id_sede
 
     db.commit()
     return {"detalle": f"Servicio '{tipo_servicio}' habilitado para el empleado {id_empleado}."}
@@ -199,6 +210,7 @@ def _deshabilitarServicio(
             detail=f"El empleado con ID {id_empleado} no existe.",
         )
 
+    _verificarSedeObjetivo(objetivo, id_sede)
     if not _puedeGestionarEmpleado(user, objetivo):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -209,7 +221,7 @@ def _deshabilitarServicio(
         select(ServicioUsuario).where(
             ServicioUsuario.id_empleado == id_empleado,
             ServicioUsuario.tipo_servicio == tipo_servicio,
-            ServicioUsuario.id_sede == id_sede,
+            or_(ServicioUsuario.id_sede == id_sede, ServicioUsuario.id_sede.is_(None)),
         )
     ).first()
 
@@ -223,6 +235,7 @@ def _deshabilitarServicio(
         db.add(registro)
     else:
         registro.habilitado = False
+        registro.id_sede = id_sede
 
     db.commit()
     return {"detalle": f"Servicio '{tipo_servicio}' deshabilitado para el empleado {id_empleado}."}

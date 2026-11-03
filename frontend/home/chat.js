@@ -9,6 +9,7 @@ const state = {
   contactos: [],
   contactoActivo: null,
   mensajes: [],
+  firmaMensajes: null,
   filtroContactos: "",
   pollingInterval: null,
 };
@@ -140,6 +141,15 @@ async function cargarContactos() {
       if (actualizado) {
         state.contactoActivo = actualizado;
         renderHeaderConversacion();
+      } else {
+        // El contacto fue eliminado o rechazado desde el otro extremo.
+        state.contactoActivo = null;
+        state.mensajes = [];
+        state.firmaMensajes = null;
+        if (state.pollingInterval) clearInterval(state.pollingInterval);
+        $("#chat-conversation").hidden = true;
+        $("#chat-placeholder").hidden = false;
+        actualizarComposer();
       }
     }
   } catch (e) {
@@ -149,29 +159,27 @@ async function cargarContactos() {
 
 function renderContactos() {
   const list = $("#contacts-list");
-  const empty = $("#empty-contacts");
   const t = (state.filtroContactos || "").toLowerCase();
 
   const filtrados = state.contactos.filter((c) =>
-    (c.nombre + " " + (c.usuario || "") + " " + c.uid_publico).toLowerCase().includes(t)
+    ((c.nombre || "") + " " + (c.usuario || "") + " " + (c.uid_publico || "")).toLowerCase().includes(t)
   );
 
   if (filtrados.length === 0) {
-    list.innerHTML = "";
-    empty.hidden = false;
-    empty.textContent = state.contactos.length > 0
+    const mensaje = state.contactos.length > 0
       ? "Ningún contacto coincide con la búsqueda."
-      : "No tienes contactos en tu sede todavía. Agrega uno con su UID único.";
+      : "No tienes contactos en tu sede todavía. Agrega uno con su Username o UID.";
+    list.innerHTML = `<p class="empty">${esc(mensaje)}</p>`;
     return;
   }
 
-  empty.hidden = true;
   list.innerHTML = filtrados.map((c) => {
     const esActivo = state.contactoActivo && state.contactoActivo.id_empleado === c.id_empleado;
     const dotClass = c.en_linea ? "online" : "offline";
     const formalBadge = !c.registrado_formalmente
-      ? `<span class="contact-badge-formal">No formalizado</span>`
+      ? `<span class="contact-badge-formal">Solicitud pendiente</span>`
       : "";
+    const uidCorto = c.uid_publico ? `${c.uid_publico.substring(0, 8)}…` : "—";
 
     return `
       <div class="contact-item ${esActivo ? "active" : ""}" data-id="${c.id_empleado}" tabindex="0">
@@ -181,7 +189,7 @@ function renderContactos() {
         </div>
         <div class="contact-info">
           <div class="contact-name">${esc(c.nombre)} ${formalBadge}</div>
-          <div class="contact-sub">${esc(c.sede_nombre || "Sede")} · ${esc(c.uid_publico.substring(0, 8))}…</div>
+          <div class="contact-sub">${esc(c.sede_nombre || "Sede")} · ${esc(uidCorto)}</div>
         </div>
       </div>
     `;
@@ -198,11 +206,18 @@ function renderContactos() {
 
 function seleccionarContacto(contacto) {
   state.contactoActivo = contacto;
+  state.mensajes = [];
+  state.firmaMensajes = null;
   renderContactos();
   renderHeaderConversacion();
 
   $("#chat-placeholder").hidden = true;
   $("#chat-conversation").hidden = false;
+
+  const contenedorMensajes = $("#chat-messages");
+  if (contenedorMensajes) {
+    contenedorMensajes.innerHTML = `<p class="empty" style="margin:auto">Cargando mensajes…</p>`;
+  }
 
   cargarMensajes();
   if (state.pollingInterval) clearInterval(state.pollingInterval);
@@ -220,7 +235,7 @@ function renderHeaderConversacion() {
 
   $("#conv-name").textContent = c.nombre;
   $("#conv-sede-tag").textContent = c.sede_nombre || "Sede";
-  $("#conv-uid-tag").textContent = `UID: ${c.uid_publico}`;
+  $("#conv-uid-tag").textContent = `UID: ${c.uid_publico || "—"}`;
 
   const statusPill = $("#conv-status-pill");
   if (c.registrado_formalmente) {
@@ -232,32 +247,87 @@ function renderHeaderConversacion() {
       statusPill.textContent = "Desconectado";
     }
     $("#formalizar-banner").hidden = true;
-    $("#btn-iniciar-videollamada").disabled = false;
+    const tieneVideo = Array.isArray(c.servicios) && c.servicios.includes("videoconferencia");
+    const btnVideo = $("#btn-iniciar-videollamada");
+    btnVideo.disabled = !tieneVideo;
+    btnVideo.title = tieneVideo
+      ? "Iniciar videollamada"
+      : "Este contacto no tiene el servicio de videollamada habilitado";
   } else {
     statusPill.className = "pill warn";
-    statusPill.textContent = "Pendiente formalizar";
+    statusPill.textContent = "Solicitud pendiente";
     $("#formalizar-banner").hidden = false;
     $("#btn-iniciar-videollamada").disabled = true;
   }
+
+  actualizarComposer();
 }
 
-async function formalizarContactoActivo() {
+function actualizarComposer() {
+  const habilitado = Boolean(state.contactoActivo && state.contactoActivo.registrado_formalmente);
+  const input = $("#input-mensaje");
+  const btnEnviar = $("#btn-enviar-msg");
+  const btnAdjuntar = $("#btn-adjuntar-img");
+
+  if (input) {
+    input.disabled = !habilitado;
+    input.placeholder = habilitado
+      ? "Escribe un mensaje seguro…"
+      : "Acepta la solicitud para habilitar el chat…";
+  }
+  if (btnEnviar) btnEnviar.disabled = !habilitado;
+  if (btnAdjuntar) btnAdjuntar.disabled = !habilitado;
+}
+
+async function aceptarSolicitudContacto() {
   if (!state.contactoActivo) return;
   const relId = state.contactoActivo.id_contacto_rel;
-  const btn = $("#btn-formalizar-contacto");
-  btn.disabled = true;
+  const btn = $("#btn-aceptar-solicitud");
+  if (btn) btn.disabled = true;
 
   try {
-    const res = await apiFetch(`/contactos/${relId}/registrar`, { method: "POST" });
+    const res = await apiFetch(`/contactos/${relId}/aceptar`, { method: "POST" });
     if (res && res.ok) {
       await cargarContactos();
+      const c = state.contactos.find((x) => x.id_contacto_rel === relId);
+      if (c) seleccionarContacto(c);
     } else {
-      alert("No se pudo registrar formalmente el contacto.");
+      const err = await (res ? res.json().catch(() => ({})) : {});
+      alert(err.detail || "No se pudo formalizar el contacto.");
     }
   } catch (e) {
     console.error("Error al formalizar:", e);
+    alert("Error de conexión al formalizar el contacto.");
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function rechazarSolicitudContacto() {
+  if (!state.contactoActivo) return;
+  if (!confirm(`¿Deseas rechazar o eliminar a ${state.contactoActivo.nombre} de tus contactos?`)) return;
+  const relId = state.contactoActivo.id_contacto_rel;
+  const btn = $("#btn-rechazar-solicitud");
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await apiFetch(`/contactos/${relId}`, { method: "DELETE" });
+    if (res && res.ok) {
+      state.contactoActivo = null;
+      state.mensajes = [];
+      state.firmaMensajes = null;
+      if (state.pollingInterval) clearInterval(state.pollingInterval);
+      $("#chat-conversation").hidden = true;
+      $("#chat-placeholder").hidden = false;
+      actualizarComposer();
+      await cargarContactos();
+    } else {
+      alert("No se pudo eliminar el contacto.");
+    }
+  } catch (e) {
+    console.error("Error al rechazar contacto:", e);
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -268,10 +338,26 @@ async function cargarMensajes() {
 
   try {
     const res = await apiFetch(`/chat/mensajes?destinatario_id=${state.contactoActivo.id_empleado}`);
-    if (!res || !res.ok) return;
+    if (!res || !res.ok) {
+      // Mientras la solicitud siga pendiente no hay conversación que mostrar.
+      if (
+        state.contactoActivo &&
+        !state.contactoActivo.registrado_formalmente &&
+        state.firmaMensajes !== ""
+      ) {
+        state.mensajes = [];
+        state.firmaMensajes = "";
+        renderMensajes();
+      }
+      return;
+    }
     const datos = await res.json();
+    const firma = datos.map((m) => `${m.id}:${m.leido ? 1 : 0}`).join("|");
+    if (state.firmaMensajes !== null && firma === state.firmaMensajes) return;
+
     const habiaNuevos = datos.length !== state.mensajes.length;
     state.mensajes = datos;
+    state.firmaMensajes = firma;
     renderMensajes(habiaNuevos);
   } catch (e) {
     console.error("Error al cargar mensajes:", e);
@@ -287,14 +373,21 @@ function renderMensajes(autoScroll = false) {
     return;
   }
 
+  const estabaCercaDelFondo =
+    container.scrollHeight - container.scrollTop - container.clientHeight < 90;
+
   container.innerHTML = state.mensajes.map((m) => {
     const clase = m.es_mio ? "mine" : "theirs";
     const fecha = new Date(m.creado_en);
-    const hora = fecha.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const hora = isNaN(fecha) ? "" : fecha.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    const contenidoHtml = m.tipo === "imagen"
+      ? `<img src="${m.contenido}" class="chat-img-thumb" alt="Imagen enviada" onclick="window.open('${m.contenido}', '_blank')" title="Clic para ampliar">`
+      : `<div class="msg-text">${esc(m.contenido)}</div>`;
 
     return `
       <div class="msg-bubble ${clase}">
-        <div class="msg-text">${esc(m.contenido)}</div>
+        ${contenidoHtml}
         <div class="msg-meta">
           <span>${hora}</span>
           ${m.es_mio ? (m.leido ? "<span>✓✓</span>" : "<span>✓</span>") : ""}
@@ -303,7 +396,7 @@ function renderMensajes(autoScroll = false) {
     `;
   }).join("");
 
-  if (autoScroll) {
+  if (autoScroll || estabaCercaDelFondo) {
     container.scrollTop = container.scrollHeight;
   }
 }
@@ -311,6 +404,10 @@ function renderMensajes(autoScroll = false) {
 async function enviarMensaje(e) {
   e.preventDefault();
   if (!state.contactoActivo) return;
+  if (!state.contactoActivo.registrado_formalmente) {
+    alert("Acepta la solicitud de chat antes de enviar mensajes.");
+    return;
+  }
 
   const input = $("#input-mensaje");
   const texto = input.value.trim();
@@ -326,6 +423,7 @@ async function enviarMensaje(e) {
       body: JSON.stringify({
         destinatario_id: state.contactoActivo.id_empleado,
         contenido: texto,
+        tipo: "texto",
       }),
     });
 
@@ -340,17 +438,84 @@ async function enviarMensaje(e) {
   } catch (err) {
     alert("Error de conexión al enviar mensaje.");
   } finally {
-    btnEnviar.disabled = false;
+    actualizarComposer();
     input.focus();
   }
 }
 
-/* Modal Agregar por UID */
+function configurarAdjuntosImagen() {
+  const btnAdjuntar = $("#btn-adjuntar-img");
+  const inputImg = $("#input-chat-img");
+  if (!btnAdjuntar || !inputImg) return;
+
+  btnAdjuntar.addEventListener("click", () => {
+    if (!state.contactoActivo) {
+      alert("Selecciona un contacto primero para enviar imágenes.");
+      return;
+    }
+    if (!state.contactoActivo.registrado_formalmente) {
+      alert("Acepta la solicitud de chat antes de enviar imágenes.");
+      return;
+    }
+    inputImg.click();
+  });
+
+  inputImg.addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !state.contactoActivo) return;
+    if (!state.contactoActivo.registrado_formalmente) {
+      alert("Acepta la solicitud de chat antes de enviar imágenes.");
+      inputImg.value = "";
+      return;
+    }
+
+    if (file.size > 2.5 * 1024 * 1024) {
+      alert("La imagen seleccionada supera el límite máximo permitido (2.5 MB).");
+      inputImg.value = "";
+      return;
+    }
+
+    btnAdjuntar.disabled = true;
+    const lector = new FileReader();
+    lector.onload = async () => {
+      const base64Data = lector.result;
+      try {
+        const res = await apiFetch("/chat/mensajes", {
+          method: "POST",
+          body: JSON.stringify({
+            destinatario_id: state.contactoActivo.id_empleado,
+            contenido: base64Data,
+            tipo: "imagen",
+          }),
+        });
+
+        if (res && res.status === 201) {
+          await cargarMensajes();
+          const container = $("#chat-messages");
+          if (container) container.scrollTop = container.scrollHeight;
+        } else {
+          const err = await (res ? res.json().catch(() => ({})) : {});
+          alert(err.detail || "Error al enviar la imagen.");
+        }
+      } catch (err) {
+        alert("Error de conexión al enviar la imagen.");
+      } finally {
+        actualizarComposer();
+        inputImg.value = "";
+      }
+    };
+    lector.readAsDataURL(file);
+  });
+}
+
+/* Modal Agregar por Username o UID */
 
 function abrirModalAgregarUid() {
   const modal = $("#modal-agregar-contacto");
   const msg = $("#msg-agregar-uid");
   const form = $("#form-agregar-uid");
+  const dropdown = $("#autocomplete-dropdown");
+  if (dropdown) dropdown.hidden = true;
   if (form) form.reset();
   if (msg) {
     msg.hidden = true;
@@ -367,22 +532,101 @@ function abrirModalAgregarUid() {
 }
 
 function cerrarModalAgregarUid() {
+  clearTimeout(queryDebounce);
+  queryDebounce = null;
   const modal = $("#modal-agregar-contacto");
+  const dropdown = $("#autocomplete-dropdown");
+  if (dropdown) dropdown.hidden = true;
+  const list = $("#autocomplete-list");
+  if (list) list.innerHTML = "";
   if (!modal) return;
   modal.setAttribute("hidden", "");
   modal.style.display = "none";
 }
 
+let queryDebounce = null;
+function configurarAutocomplete() {
+  const input = $("#input-uid");
+  const dropdown = $("#autocomplete-dropdown");
+  const list = $("#autocomplete-list");
+  if (!input || !dropdown || !list) return;
+
+  input.addEventListener("input", (e) => {
+    clearTimeout(queryDebounce);
+    const val = e.target.value.trim();
+
+    const esUUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(val);
+    const pareceUIDParcial = !esUUID && /^[0-9a-fA-F]{8}-[0-9a-fA-F-]*$/.test(val);
+
+    // Un UID solo se procesa cuando está completo; los prefijos no muestran sugerencias.
+    if (!val || val.length < 2 || esUUID || pareceUIDParcial) {
+      dropdown.hidden = true;
+      list.innerHTML = "";
+      return;
+    }
+
+    queryDebounce = setTimeout(async () => {
+      try {
+        const res = await apiFetch(`/contactos/buscar?q=${encodeURIComponent(val)}`);
+        if (!res || !res.ok) {
+          dropdown.hidden = true;
+          return;
+        }
+        const usuarios = await res.json();
+        if (!usuarios || usuarios.length === 0) {
+          dropdown.hidden = true;
+          list.innerHTML = "";
+          return;
+        }
+
+        list.innerHTML = usuarios.map((u) => {
+          const tag = u.ya_es_contacto
+            ? `<span class="ac-tag is-contact">Ya es contacto</span>`
+            : (u.solicitud_pendiente ? `<span class="ac-tag pending">Pendiente</span>` : `<span class="ac-tag">Disponible</span>`);
+          return `
+            <div class="autocomplete-item" data-username="${esc(u.usuario)}" data-uid="${esc(u.uid_publico)}">
+              <div class="ac-user-info">
+                <span class="ac-name">${esc(u.nombre)}</span>
+                <span class="ac-user">@${esc(u.usuario)} · ${esc(u.uid_publico.substring(0, 8))}…</span>
+              </div>
+              ${tag}
+            </div>
+          `;
+        }).join("");
+
+        list.querySelectorAll(".autocomplete-item").forEach((item) => {
+          item.addEventListener("mousedown", (ev) => {
+            ev.preventDefault();
+            input.value = item.dataset.username;
+            dropdown.hidden = true;
+          });
+        });
+
+        dropdown.hidden = false;
+      } catch (e) {
+        dropdown.hidden = true;
+      }
+    }, 220);
+  });
+
+  input.addEventListener("blur", () => {
+    setTimeout(() => { dropdown.hidden = true; }, 200);
+  });
+}
+
 async function guardarContactoUid(e) {
   e.preventDefault();
-  const uid = $("#input-uid").value.trim();
+  const input = $("#input-uid");
+  const identificador = input.value.trim();
   const alias = $("#input-alias").value.trim();
   const msg = $("#msg-agregar-uid");
   const btn = $("#btn-submit-uid");
+  const dropdown = $("#autocomplete-dropdown");
+  if (dropdown) dropdown.hidden = true;
 
-  if (!uid) {
+  if (!identificador) {
     msg.className = "form-msg error";
-    msg.textContent = "Por favor ingresa el UID único del usuario.";
+    msg.textContent = "Por favor ingresa un nombre de usuario o UID único.";
     msg.hidden = false;
     msg.style.display = "block";
     return;
@@ -396,13 +640,13 @@ async function guardarContactoUid(e) {
   try {
     const res = await apiFetch("/contactos", {
       method: "POST",
-      body: JSON.stringify({ uid_publico: uid, alias: alias || null }),
+      body: JSON.stringify({ identificador, alias: alias || null }),
     });
 
-    if (res && res.status === 201) {
+    if (res && (res.status === 201 || res.status === 200)) {
       const nuevo = await res.json();
       msg.className = "form-msg success";
-      msg.textContent = "¡Contacto agregado exitosamente!";
+      msg.textContent = "¡Contacto añadido exitosamente!";
       msg.hidden = false;
       msg.style.display = "block";
       await cargarContactos();
@@ -411,19 +655,28 @@ async function guardarContactoUid(e) {
       setTimeout(() => { cerrarModalAgregarUid(); }, 600);
     } else {
       const err = await (res ? res.json().catch(() => ({})) : {});
+      let errorMsg = "No se pudo agregar el contacto. Asegúrate de que pertenezca a tu sede.";
+      if (err && err.detail) {
+        if (typeof err.detail === "string") {
+          errorMsg = err.detail;
+        } else if (Array.isArray(err.detail) && err.detail[0]?.msg) {
+          errorMsg = err.detail[0].msg;
+        }
+      }
       msg.className = "form-msg error";
-      msg.textContent = err.detail || "No se pudo agregar el contacto. Asegúrate de que pertenezca a tu sede.";
+      msg.textContent = errorMsg;
       msg.hidden = false;
       msg.style.display = "block";
     }
   } catch (err) {
+    console.error("Error al añadir contacto:", err);
     msg.className = "form-msg error";
-    msg.textContent = "Error al conectar con el servidor.";
+    msg.textContent = "Error al procesar la solicitud.";
     msg.hidden = false;
     msg.style.display = "block";
   } finally {
     btn.disabled = false;
-    btn.textContent = "Agregar contacto";
+    btn.textContent = "Añadir contacto";
   }
 }
 
@@ -447,11 +700,42 @@ $("#btn-modal-agregar-uid").addEventListener("click", abrirModalAgregarUid);
 $("#btn-cerrar-modal-uid").addEventListener("click", cerrarModalAgregarUid);
 $("#btn-cancelar-uid").addEventListener("click", cerrarModalAgregarUid);
 $("#form-agregar-uid").addEventListener("submit", guardarContactoUid);
-$("#btn-formalizar-contacto").addEventListener("click", formalizarContactoActivo);
+const btnAceptarSolicitud = $("#btn-aceptar-solicitud");
+if (btnAceptarSolicitud) btnAceptarSolicitud.addEventListener("click", aceptarSolicitudContacto);
+const btnRechazarSolicitud = $("#btn-rechazar-solicitud");
+if (btnRechazarSolicitud) btnRechazarSolicitud.addEventListener("click", rechazarSolicitudContacto);
 
-$("#btn-iniciar-videollamada").addEventListener("click", () => {
-  if (!state.contactoActivo) return;
-  window.location.assign(`videocall.html?contacto_id=${state.contactoActivo.id_empleado}`);
+$("#btn-iniciar-videollamada").addEventListener("click", async () => {
+  const contacto = state.contactoActivo;
+  if (!contacto) return;
+
+  if (!contacto.registrado_formalmente) {
+    alert("Debes formalizar el contacto antes de iniciar una videollamada.");
+    return;
+  }
+  if (!Array.isArray(contacto.servicios) || !contacto.servicios.includes("videoconferencia")) {
+    alert("Este contacto no tiene el servicio de videollamada habilitado.");
+    return;
+  }
+
+  const boton = $("#btn-iniciar-videollamada");
+  boton.disabled = true;
+  try {
+    const res = await apiFetch("/videoconferencia/salas", {
+      method: "POST",
+      body: JSON.stringify({ id_contacto: contacto.id_empleado }),
+    });
+    const datos = res ? await res.json().catch(() => ({})) : {};
+    if (!res || !res.ok) {
+      alert(datos.detail || "No se pudo iniciar la videollamada.");
+      return;
+    }
+    window.location.assign(`videocall.html?codigo_sala=${encodeURIComponent(datos.codigo_sala)}`);
+  } catch (e) {
+    alert("Error de conexión al iniciar la videollamada.");
+  } finally {
+    boton.disabled = false;
+  }
 });
 
 window.addEventListener("keydown", (e) => {
@@ -482,13 +766,24 @@ async function iniciar() {
   }
 
   const u = state.usuario;
+  if (u.tipo_admin === "usuario" && Array.isArray(u.servicios)) {
+    const chatSvc = u.servicios.find((s) => s.tipo_servicio === "chat");
+    if (chatSvc && !chatSvc.habilitado) {
+      alert("Tu servicio de chat se encuentra deshabilitado por el administrador.");
+      window.location.replace("usuario.html");
+      return;
+    }
+  }
   $("#user-name").textContent = u.nombre || u.usuario;
   $("#user-role").textContent = u.tipo_admin === "admin-g" ? "ADMIN-G" : (u.tipo_admin === "admin-s" ? "ADMIN-S" : "CLIENTE");
   $("#user-badge").hidden = false;
   $("#chat-app").hidden = false;
 
+  configurarAutocomplete();
+  configurarAdjuntosImagen();
+
   await cargarContactos();
-  setInterval(cargarContactos, 10000);
+  setInterval(cargarContactos, 5000);
 
   enviarHeartbeat();
   setInterval(enviarHeartbeat, 30000);

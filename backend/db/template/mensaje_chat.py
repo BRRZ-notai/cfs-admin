@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from .base import Base
 from typing import TYPE_CHECKING
-from sqlalchemy import Boolean, DateTime, ForeignKey, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 if TYPE_CHECKING:
@@ -23,6 +23,9 @@ class MensajeChat(Base):
         ForeignKey("sedes.id_sede", ondelete="CASCADE"), index=True
     )
     contenido: Mapped[str] = mapped_column(Text)
+    tipo: Mapped[str] = mapped_column(
+        String(20), default="texto", server_default="texto", nullable=False
+    )
     leido: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", index=True
     )

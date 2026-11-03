@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 if TYPE_CHECKING:
     from .empleado import Empleado
     from .sede import Sede
+    from .invitacion_videoconf import InvitacionVideoconf
 
 
 class SalaVideoconf(Base):
@@ -37,6 +38,11 @@ class SalaVideoconf(Base):
     iniciador: Mapped["Empleado"] = relationship(foreign_keys=[id_iniciador])
     invitado: Mapped["Empleado | None"] = relationship(foreign_keys=[id_invitado])
     sede: Mapped["Sede"] = relationship(foreign_keys=[id_sede])
+    invitaciones: Mapped[list["InvitacionVideoconf"]] = relationship(
+        back_populates="sala",
+        cascade="all, delete-orphan",
+        order_by="InvitacionVideoconf.creada_en",
+    )
 
     def __repr__(self) -> str:
         return f"<SalaVideoconf codigo={self.codigo_sala} sede={self.id_sede} activa={self.activa}>"

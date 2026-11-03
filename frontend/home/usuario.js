@@ -119,33 +119,25 @@ async function enviarHeartbeat() {
 }
 
 async function comprobarServicios() {
-  // Consultar usuarios de la sede para identificar mis servicios habilitados
-  const idSede = state.usuario.id_sede;
-  if (!idSede) {
-    // Si no tiene sede fija pero es admin o asignado
-    actualizarVistaServicios(true, true);
-    return;
-  }
-
   try {
-    const res = await apiFetch(`/sedes/${idSede}/usuarios`);
+    const res = await apiFetch("/me");
     if (res && res.ok) {
-      const lista = await res.json();
-      const me = lista.find((u) => u.id_empleado === state.usuario.id);
-      if (me && me.servicios) {
-        const chat = me.servicios.find((s) => s.tipo_servicio === "chat");
-        const video = me.servicios.find((s) => s.tipo_servicio === "videoconferencia");
-        actualizarVistaServicios(chat ? chat.habilitado : false, video ? video.habilitado : false);
-        return;
-      }
+      state.usuario = await res.json();
+      const servicios = state.usuario.servicios || [];
+      const chat = servicios.find((s) => s.tipo_servicio === "chat");
+      const video = servicios.find((s) => s.tipo_servicio === "videoconferencia");
+      const chatHab = chat ? chat.habilitado : (state.usuario.tipo_admin === "admin-g");
+      const videoHab = video ? video.habilitado : (state.usuario.tipo_admin === "admin-g");
+      actualizarVistaServicios(Boolean(chatHab), Boolean(videoHab));
+      return;
     }
   } catch (e) {
     console.error("Error al consultar servicios del usuario:", e);
   }
 
   // Fallback si es administrador
-  const esAdmin = state.usuario.tipo_admin === "admin-g";
-  actualizarVistaServicios(esAdmin, esAdmin);
+  const esAdmin = state.usuario && state.usuario.tipo_admin === "admin-g";
+  actualizarVistaServicios(Boolean(esAdmin), Boolean(esAdmin));
 }
 
 function actualizarVistaServicios(chatHab, videoHab) {
@@ -183,6 +175,20 @@ function actualizarVistaServicios(chatHab, videoHab) {
     badgeVideo.textContent = "Deshabilitado por admin";
     btnVideo.disabled = true;
   }
+}
+
+async function actualizarContadorVideo() {
+  const btn = $("#btn-entrar-video");
+  if (!btn || btn.disabled) return;
+  try {
+    const res = await apiFetch("/videoconferencia/invitaciones?tipo=recibidas&estado=pendiente");
+    if (!res || !res.ok) return;
+    const pendientes = await res.json();
+    const total = Array.isArray(pendientes) ? pendientes.length : 0;
+    btn.textContent = total > 0
+      ? `Abrir Videollamadas (${total}) →`
+      : "Abrir Videollamadas →";
+  } catch (e) { /* no-op */ }
 }
 
 /* Modal Cambiar Contraseña */
@@ -300,7 +306,7 @@ $("#btn-entrar-chat").addEventListener("click", () => {
 });
 
 $("#btn-entrar-video").addEventListener("click", () => {
-  window.location.assign("videocall.html");
+  window.location.assign("videollamadas.html");
 });
 
 const btnCambiarPass = $("#btn-cambiar-pass");
@@ -356,7 +362,9 @@ async function iniciar() {
   $("#panel").hidden = false;
 
   await comprobarServicios();
-  setInterval(comprobarServicios, 2000);
+  await actualizarContadorVideo();
+  setInterval(comprobarServicios, 15000);
+  setInterval(actualizarContadorVideo, 15000);
 
   enviarHeartbeat();
   setInterval(enviarHeartbeat, 30000);

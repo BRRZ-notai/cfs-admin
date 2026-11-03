@@ -26,11 +26,11 @@
 </header>
 
 <main class="chat-app" id="chat-app" hidden>
-  <!-- Barra lateral: Contactos y Búsqueda por UID -->
+  <!-- Barra lateral: Contactos y Búsqueda por Username o UID -->
   <aside class="chat-sidebar card">
     <div class="sidebar-header">
       <h2>Mis Contactos</h2>
-      <button class="btn btn-sm" id="btn-modal-agregar-uid" type="button" title="Agregar contacto por UID">+ UID</button>
+      <button class="btn btn-sm" id="btn-modal-agregar-uid" type="button" title="Añadir contacto">+ Añadir</button>
     </div>
 
     <div class="sidebar-search">
@@ -39,7 +39,7 @@
 
     <!-- Lista de contactos -->
     <div class="contacts-list" id="contacts-list">
-      <p class="empty" id="empty-contacts">No tienes contactos en tu sede todavía. Agrega uno con su UID único.</p>
+      <p class="empty">No tienes contactos en tu sede todavía. Agrega uno con su Username o UID.</p>
     </div>
   </aside>
 
@@ -49,7 +49,7 @@
     <div class="chat-placeholder" id="chat-placeholder">
       <div class="placeholder-icon">💬</div>
       <h2>Selecciona un contacto para chatear</h2>
-      <p>Comunícate en tiempo real con colegas de tu misma sede o agrega a un nuevo miembro con su UID único.</p>
+      <p>Comunícate en tiempo real con miembros de tu misma sede o añade un contacto por nombre de usuario o UID.</p>
     </div>
 
     <!-- Conversación activa -->
@@ -72,10 +72,16 @@
         </div>
       </div>
 
-      <!-- Banner de formalización si aún no está registrado formalmente -->
+      <!-- Banner de formalización y aceptación de solicitud -->
       <div class="formalizar-banner" id="formalizar-banner" hidden>
-        <span>⚠️ Contacto no formalizado. Registra formalmente a este usuario para ver su nombre real, sede y estado de conexión completo.</span>
-        <button class="btn btn-sm" id="btn-formalizar-contacto" type="button">✅ Registrar Formalmente</button>
+        <div class="formalizar-info">
+          <span class="formalizar-icon">⚠️</span>
+          <span id="formalizar-texto">Solicitud pendiente: Acepta la solicitud para formalizar el contacto y habilitar el chat bidireccional y videollamadas.</span>
+        </div>
+        <div class="formalizar-actions">
+          <button class="btn btn-sm btn-accept" id="btn-aceptar-solicitud" type="button">✅ Aceptar Solicitud</button>
+          <button class="ghost btn-sm btn-reject" id="btn-rechazar-solicitud" type="button">❌ Rechazar</button>
+        </div>
       </div>
 
       <!-- Historial de mensajes -->
@@ -83,28 +89,33 @@
         <!-- Renderizado dinámico de burbujas -->
       </div>
 
-      <!-- Barra de envío -->
+      <!-- Barra de envío con soporte para texto e imágenes -->
       <form class="chat-input-bar" id="form-chat" novalidate>
-        <input type="text" id="input-mensaje" placeholder="Escribe un mensaje seguro…" autocomplete="off" maxlength="5000" required>
+        <input type="file" id="input-chat-img" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+        <button type="button" class="btn-attach" id="btn-adjuntar-img" title="Adjuntar imagen" aria-label="Adjuntar imagen">📷</button>
+        <input type="text" id="input-mensaje" placeholder="Escribe un mensaje seguro…" autocomplete="off" maxlength="5000">
         <button class="btn" id="btn-enviar-msg" type="submit">Enviar</button>
       </form>
     </div>
   </section>
 </main>
 
-<!-- Modal: Agregar Contacto por UID Único -->
+<!-- Modal: Añadir Contacto por Username o UID -->
 <div class="modal-backdrop" id="modal-agregar-contacto" hidden role="dialog" aria-modal="true" aria-labelledby="titulo-modal-uid">
   <div class="modal-card">
     <div class="modal-header">
-      <h2 id="titulo-modal-uid">Agregar Contacto por UID</h2>
+      <h2 id="titulo-modal-uid">Añadir Contacto</h2>
       <button class="modal-close" id="btn-cerrar-modal-uid" type="button" aria-label="Cerrar modal">&times;</button>
     </div>
-    <p class="modal-sub">Ingresa el UID único (UUID) del usuario de tu misma sede para agregarlo a tu lista de contactos.</p>
+    <p class="modal-sub">Ingresa el nombre de usuario o UID único de un miembro de tu misma sede.</p>
     
     <form id="form-agregar-uid" novalidate>
-      <div class="form-group">
-        <label for="input-uid">UID del usuario <span class="req">*</span></label>
-        <input type="text" id="input-uid" required placeholder="Ej: c4b182e0-2819-4a9f-8551-789a1b2c3d4e" autocomplete="off">
+      <div class="form-group autocomplete-container">
+        <label for="input-uid">Usuario o UID <span class="req">*</span></label>
+        <input type="text" id="input-uid" required maxlength="50" placeholder="Escribe username o pega UID..." autocomplete="off">
+        <div class="autocomplete-dropdown" id="autocomplete-dropdown" hidden>
+          <div class="autocomplete-list" id="autocomplete-list"></div>
+        </div>
       </div>
 
       <div class="form-group">
@@ -116,7 +127,7 @@
 
       <div class="modal-actions">
         <button class="ghost" id="btn-cancelar-uid" type="button">Cancelar</button>
-        <button class="btn" id="btn-submit-uid" type="submit">Agregar contacto</button>
+        <button class="btn" id="btn-submit-uid" type="submit">Añadir contacto</button>
       </div>
     </form>
   </div>

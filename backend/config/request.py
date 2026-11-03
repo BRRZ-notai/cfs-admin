@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -91,6 +93,7 @@ class MeResponse(BaseModel):
     es_admin_s: bool = False
     uid_publico: str | None = None
     sede_nombre: str | None = None
+    servicios: list[ServicioUsuarioResponse] = []
 
 
 class ChangePasswordRequest(BaseModel):
@@ -145,8 +148,17 @@ class UsuarioResponse(BaseModel):
 class ContactoBuscarRequest(BaseModel):
     uid_publico: str = Field(..., min_length = 10, max_length = 50)
 
+class ContactoBuscarResponse(BaseModel):
+    model_config = ConfigDict(from_attributes = True)
+    id_empleado: int
+    nombre: str
+    usuario: str
+    uid_publico: str
+    ya_es_contacto: bool = False
+    solicitud_pendiente: bool = False
+
 class ContactoAgregarRequest(BaseModel):
-    uid_publico: str = Field(..., min_length = 10, max_length = 50)
+    identificador: str = Field(..., min_length = 2, max_length = 50)
     alias: str | None = Field(None, max_length = 100)
 
 class ContactoResponse(BaseModel):
@@ -168,7 +180,8 @@ class ContactoResponse(BaseModel):
 
 class MensajeChatCreate(BaseModel):
     destinatario_id: int
-    contenido: str = Field(..., min_length = 1, max_length = 5000)
+    contenido: str = Field(..., min_length = 1, max_length = 3500000)
+    tipo: str = Field(default = "texto", pattern = "^(texto|imagen)$")
 
 class MensajeChatResponse(BaseModel):
     model_config = ConfigDict(from_attributes = True)
@@ -177,6 +190,7 @@ class MensajeChatResponse(BaseModel):
     id_destinatario: int
     id_sede: int
     contenido: str
+    tipo: str = "texto"
     leido: bool
     creado_en: str
     es_mio: bool = False
@@ -186,14 +200,74 @@ class MensajeChatResponse(BaseModel):
 # --- Videoconferencia ---
 
 class SalaVideoconfCreate(BaseModel):
-    id_contacto: int | None = None
+    id_contacto: int | None = Field(None, description="ID de empleado del contacto (no el ID de la relación).")
+    identificador: str | None = Field(None, min_length=2, max_length=50, description="Username o UID exacto de 36 caracteres.")
+
+    @model_validator(mode="after")
+    def validar_identificador(self):
+        if (self.id_contacto is None) == (self.identificador is None):
+            raise ValueError("Debes indicar id_contacto o identificador, pero no ambos.")
+        return self
 
 class SalaVideoconfResponse(BaseModel):
-    model_config = ConfigDict(from_attributes = True)
     codigo_sala: str
+    id_sala: int
     id_sede: int
     id_iniciador: int
     id_invitado: int | None = None
+    nombre_iniciador: str | None = None
+    nombre_invitado: str | None = None
+    usuario_invitado: str | None = None
+    uid_invitado: str | None = None
+    sede_invitado: str | None = None
+    sede_iniciador: str | None = None
+    estado_invitacion: str | None = None
+    invitacion_id: int | None = None
+    expira_en: datetime | None = None
     activa: bool
+    es_iniciador: bool = False
+    puede_entrar: bool = False
+
+class InvitacionVideoconfResponse(BaseModel):
+    id: int
+    id_sala: int
+    codigo_sala: str
+    id_invitador: int
+    nombre_invitador: str | None = None
+    usuario_invitador: str | None = None
+    uid_invitador: str | None = None
+    sede_invitador: str | None = None
+    id_invitado: int | None = None
+    nombre_invitado: str | None = None
+    usuario_invitado: str | None = None
+    uid_invitado: str | None = None
+    estado: str
+    creada_en: datetime
+    expira_en: datetime
+    respondida_en: datetime | None = None
+    puede_aceptar: bool = False
+    es_recibida: bool = True
+
+class IceServerConfig(BaseModel):
+    urls: list[str]
+    username: str | None = None
+    credential: str | None = None
+
+class IceConfigResponse(BaseModel):
+    iceServers: list[IceServerConfig]
+
+class SenalVideoconfCreate(BaseModel):
+    tipo: str = Field(..., pattern="^(offer|answer|candidate)$")
+    para_id: int
+    sdp: dict | None = None
+    candidate: dict | None = None
+
+    @model_validator(mode="after")
+    def validar_carga(self):
+        if self.tipo in ("offer", "answer") and not self.sdp:
+            raise ValueError("Las señales offer/answer requieren sdp.")
+        if self.tipo == "candidate" and not self.candidate:
+            raise ValueError("Las señales candidate requieren candidate.")
+        return self
 
 

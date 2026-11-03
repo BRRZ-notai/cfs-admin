@@ -30,8 +30,11 @@ def limpiarPresencia(db: Session) -> None:
         )
     ).scalars().all()
 
+    hubo_cambios = False
     for emp in empleados:
         if emp.ultima_vez_en_linea is None or emp.ultima_vez_en_linea < umbral:
             emp.en_linea = False
+            hubo_cambios = True
 
-    db.commit()
+    if hubo_cambios:
+        db.commit()

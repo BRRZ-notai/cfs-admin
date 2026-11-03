@@ -28,6 +28,13 @@ class Configuration(BaseSettings):
     postgres_db: str
     postgres_sql_echo: bool = False
 
+    # Videoconferencia
+    video_invitacion_expira_minutos: int = 2
+    stun_urls: list[str] = ["stun:stun.l.google.com:19302"]
+    turn_url: str | None = None
+    turn_username: str | None = None
+    turn_credential: str | None = None
+
 
 
     @field_validator("jwt_secret_key")
@@ -35,6 +42,14 @@ class Configuration(BaseSettings):
     def validateJwtSecret(cls, value: str) -> str:
         if (len(value.strip()) < 32) or (value.startswith("tu_")):
             raise ValueError("JWT_SECRET_KEY debe tener al menos 32 caracteres y no puede ser la clave de ejemplo.")
+        return value
+
+
+    @field_validator("video_invitacion_expira_minutos")
+    @classmethod
+    def validateVideoExpira(cls, value: int) -> int:
+        if value < 1 or value > 30:
+            raise ValueError("VIDEO_INVITACION_EXPIRA_MINUTOS debe estar entre 1 y 30.")
         return value
 
 

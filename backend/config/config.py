@@ -14,8 +14,10 @@ def MountUrlDb() -> str:
 def getLongHashPassword() -> int:
     return 8
 
+_DUMMY_PASSWORD_CONSTANT = "cfs_dummy_password_timing_equalization_constant_32b"
+
 def HashDummy() -> str:
-    return secrets.token_urlsafe(32)
+    return _DUMMY_PASSWORD_CONSTANT
 
 def ConfigBloq() -> tuple[int, int]:
     maximoIntentos = 5
